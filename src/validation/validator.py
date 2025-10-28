@@ -1,29 +1,40 @@
 #!/usr/bin/env python3
 """
-Validator CLI
-Lee reglas desde configs/validation_rules.yaml y valida un CSV de entrada.
+Validator CLI (robusto)
+Intenta usar PyYAML (si está). Si no, usa JSON.
 Salida:
- - valid.csv  (filas que pasan validación)
- - discarded.csv (filas descartadas con columna `discard_reason`)
+ - data/output/valid.csv
+ - data/output/discarded.csv (con discard_reason)
 """
 import argparse
 import csv
 import re
 from datetime import datetime
 from typing import Any, Dict, List, Tuple
-
 import pandas as pd
-import yaml
 import sys
 import os
+import json
+
+# intento de import yaml, si falla usamos JSON
+try:
+    import yaml  # type: ignore
+    _USE_YAML = True
+except Exception:
+    yaml = None  # type: ignore
+    _USE_YAML = False
 
 def load_rules(path: str) -> Dict[str, Any]:
     with open(path, "r", encoding="utf-8") as f:
-        cfg = yaml.safe_load(f)
+        if _USE_YAML and path.lower().endswith((".yml", ".yaml")):
+            cfg = yaml.safe_load(f)
+        else:
+            # JSON fallback
+            cfg = json.load(f)
     return cfg.get("fields", {})
 
 def parse_boolean(value: Any) -> Tuple[bool, Any]:
-    if pd.isna(value):
+    if pd.isna(value) or value == "":
         return True, None
     if isinstance(value, bool):
         return True, value
@@ -43,7 +54,7 @@ def parse_integer(value: Any) -> Tuple[bool, Any]:
         return False, None
 
 def parse_string(value: Any) -> Tuple[bool, Any]:
-    if pd.isna(value):
+    if pd.isna(value) or value == "":
         return True, None
     return True, str(value)
 
@@ -60,11 +71,6 @@ def parse_date(value: Any, formats: List[str]) -> Tuple[bool, Any]:
     return False, None
 
 def validate_row(row: Dict[str, Any], rules: Dict[str, Any]) -> Tuple[bool, Dict[str, Any], str]:
-    """
-    Returns (is_valid_row, new_row, discard_reason)
-    new_row may have None for invalid optional fields.
-    If is_valid_row == False, discard_reason explains why.
-    """
     new_row = dict(row)  # shallow copy
     for field, rule in rules.items():
         val = row.get(field, None)
@@ -105,7 +111,6 @@ def validate_row(row: Dict[str, Any], rules: Dict[str, Any]) -> Tuple[bool, Dict
                         new_row[field] = None
                         continue
             except Exception:
-                # ignore length check on non-string-ish types
                 pass
 
         # regex check
@@ -133,7 +138,7 @@ def validate_row(row: Dict[str, Any], rules: Dict[str, Any]) -> Tuple[bool, Dict
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", "-i", required=True, help="CSV input path")
-    parser.add_argument("--rules", "-r", default="configs/validation_rules.yaml", help="Rules YAML")
+    parser.add_argument("--rules", "-r", default="configs/validation_rules.json", help="Rules path (yaml or json)")
     parser.add_argument("--output-dir", "-o", default="data/output", help="Output directory")
     args = parser.parse_args()
 
@@ -156,7 +161,6 @@ def main():
         if ok:
             valid_rows.append(new_row)
         else:
-            # include original values + reason
             x = dict(row)
             x["discard_reason"] = reason
             discarded.append(x)
@@ -164,14 +168,12 @@ def main():
     valid_df = pd.DataFrame(valid_rows)
     discarded_df = pd.DataFrame(discarded)
 
-    # write outputs
     valid_out = os.path.join(args.output_dir, "valid.csv")
     disc_out  = os.path.join(args.output_dir, "discarded.csv")
 
     if not valid_df.empty:
         valid_df.to_csv(valid_out, index=False)
     else:
-        # create empty with header from rules keys if nothing valid
         cols = list(rules.keys())
         pd.DataFrame(columns=cols).to_csv(valid_out, index=False)
 
@@ -180,7 +182,6 @@ def main():
     else:
         pd.DataFrame(columns=list(df.columns)+["discard_reason"]).to_csv(disc_out, index=False)
 
-    # logging summary
     total = len(df)
     valid_n = 0 if valid_df.empty else len(valid_df)
     disc_n = 0 if discarded_df.empty else len(discarded_df)
