@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """
-Validator CLI (robusto)
-Intenta usar PyYAML (si está). Si no, usa JSON.
+Validator CLI (JSON-only)
+Lee reglas exclusivamente desde JSON (configs/validation_rules.json).
 Salida:
  - data/output/valid.csv
  - data/output/discarded.csv (con discard_reason)
 """
 import argparse
-import csv
 import re
 from datetime import datetime
 from typing import Any, Dict, List, Tuple
@@ -16,21 +15,9 @@ import sys
 import os
 import json
 
-# intento de import yaml, si falla usamos JSON
-try:
-    import yaml  # type: ignore
-    _USE_YAML = True
-except Exception:
-    yaml = None  # type: ignore
-    _USE_YAML = False
-
 def load_rules(path: str) -> Dict[str, Any]:
     with open(path, "r", encoding="utf-8") as f:
-        if _USE_YAML and path.lower().endswith((".yml", ".yaml")):
-            cfg = yaml.safe_load(f)
-        else:
-            # JSON fallback
-            cfg = json.load(f)
+        cfg = json.load(f)
     return cfg.get("fields", {})
 
 def parse_boolean(value: Any) -> Tuple[bool, Any]:
@@ -138,7 +125,7 @@ def validate_row(row: Dict[str, Any], rules: Dict[str, Any]) -> Tuple[bool, Dict
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", "-i", required=True, help="CSV input path")
-    parser.add_argument("--rules", "-r", default="configs/validation_rules.json", help="Rules path (yaml or json)")
+    parser.add_argument("--rules", "-r", default="configs/validation_rules.json", help="Rules JSON path")
     parser.add_argument("--output-dir", "-o", default="data/output", help="Output directory")
     args = parser.parse_args()
 
