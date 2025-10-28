@@ -1,0 +1,36 @@
+# configs/validation_rules.yaml
+fields:
+  title:
+    type: string
+    required: true
+    max_length: 65        # títulos >65 son descartados (regla actual)
+  external_link:
+    type: string
+    required: true
+    regex: '^https?://'
+  created_at:
+    type: date
+    required: true
+    formats:
+      - '%Y-%m-%d'       # formato esperado: 2024-05-01
+      - '%Y-%m-%dT%H:%M:%S' # tolerancia para timestamps ISO
+  summary:
+    type: string
+    required: false
+    max_length: 2000
+  rtype_id:
+    type: integer
+    required: false
+  classification_id:
+    type: integer
+    required: false
+  entity:
+    type: string
+    required: true
+    allowed_values: ['ANI']
+  gtype:
+    type: string
+    required: false
+  is_active:
+    type: boolean
+    required: false
